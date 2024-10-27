@@ -1,0 +1,402 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+    provider = "prisma-client-js"
+}
+
+generator json {
+    provider = "prisma-json-types-generator"
+}
+
+datasource db {
+    provider = "postgresql"
+    // NOTE: When using mysql or sqlserver, uncomment the @db.Text annotations in model Account below
+    // Further reading:
+    // https://next-auth.js.org/adapters/prisma#create-the-prisma-schema
+    // https://www.prisma.io/docs/reference/api-reference/prisma-schema-reference#string
+    url      = env("DATABASE_URL")
+}
+
+model Post {
+    id        Int      @id @default(autoincrement())
+    name      String
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    createdBy   User   @relation(fields: [createdById], references: [id])
+    createdById String
+
+    @@index([name])
+}
+
+// Necessary for Next auth
+model Account {
+    id                       String  @id @default(cuid())
+    userId                   String
+    type                     String
+    provider                 String
+    providerAccountId        String
+    refresh_token            String? // @db.Text
+    access_token             String? // @db.Text
+    expires_at               Int?
+    token_type               String?
+    scope                    String?
+    id_token                 String? // @db.Text
+    session_state            String?
+    user                     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+    refresh_token_expires_in Int?
+
+    @@unique([provider, providerAccountId])
+}
+
+model Session {
+    id           String   @id @default(cuid())
+    sessionToken String   @unique
+    userId       String
+    expires      DateTime
+    user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+    id            String    @id @default(cuid())
+    name          String?
+    email         String?   @unique
+    emailVerified DateTime?
+    image         String?
+    accounts      Account[]
+    sessions      Session[]
+    posts         Post[]
+}
+
+model VerificationToken {
+    identifier String
+    token      String   @unique
+    expires    DateTime
+
+    @@unique([identifier, token])
+}
+
+////////////////////////////////////////////////////////////
+
+enum ClassType {
+    VILLAGER
+    WARRIOR
+    MAGE
+    ROGUE
+}
+
+enum Rank {
+    MEMBER
+    MODERATOR
+    ADMIN
+}
+
+enum Gamemode {
+    ADVENTURE
+    SURVIVAL
+    CREATIVE
+}
+
+model player {
+    uuid         String    @id
+    name         String    @unique
+    classType    ClassType @default(VILLAGER)
+    level        Int       @default(1)
+    exp          Int       @default(0)
+    rank         Rank      @default(MEMBER)
+    hp           Int       @default(100)
+    mana         Int       @default(20)
+    locationX    Float
+    locationY    Float
+    locationZ    Float
+    world        String
+    pearls       Int       @default(0)
+    rewardPoints Int       @default(0)
+    gamemode     Gamemode  @default(ADVENTURE)
+    lastSeen     DateTime  @updatedAt
+
+    inventory    player_inventory_item[]
+    skills       skill[]
+    quests       quest[]
+    stats        player_stats?
+    horses       horse[]
+    guildId      String?
+    punishments  punishment[]
+    itemStorages item_storage[]
+    marketplace  marketplace[]
+
+    guild guild? @relation(fields: [guildId], references: [id])
+
+    updatedAt         DateTime      @updatedAt
+    createdAt         DateTime      @default(now())
+    marketplaceSeller marketplace[] @relation("seller")
+    marketplaceBuyer  marketplace[] @relation("buyer")
+
+    @@index([rank])
+}
+
+model player_inventory_item {
+    playerId String
+    itemId   String
+    slot     Int
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    player player   @relation(fields: [playerId], references: [uuid])
+    item   rpg_item @relation(fields: [itemId], references: [id])
+
+    @@unique([playerId, slot])
+}
+
+model item_storage {
+    id       String     @id @default(cuid())
+    player   player?    @relation(fields: [playerId], references: [uuid])
+    playerId String?    @unique
+    guild    guild?     @relation(fields: [guildId], references: [id])
+    guildId  String?    @unique
+    items    rpg_item[]
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+}
+
+enum ItemType {
+    EQUIPMENT
+    CONSUMABLE
+    MATERIAL
+    DEFAULT
+}
+
+model rpg_item {
+    id                  String                  @id @default(cuid())
+    name                String
+    quantity            Int
+    itemType            ItemType
+    itemStats           Json
+    playerInventoryItem player_inventory_item[]
+    itemStorage         item_storage[]
+
+    marketplace marketplace[]
+    mob_drop    mob_drop[]
+}
+
+model skill {
+    id       String @id @default(cuid())
+    name     String
+    level    Int    @default(1)
+    exp      Int    @default(0)
+    player   player @relation(fields: [playerId], references: [uuid])
+    playerId String
+
+    @@unique([playerId, name])
+}
+
+model quest {
+    id        String  @id @default(cuid())
+    name      String
+    progress  Int     @default(0)
+    completed Boolean @default(false)
+    player    player  @relation(fields: [player_id], references: [uuid])
+    player_id String
+
+    updatedAt DateTime @updatedAt
+    createdAt DateTime @default(now())
+
+    @@unique([player_id, name])
+}
+
+model player_stats {
+    id              String @id @default(cuid())
+    player          player @relation(fields: [player_id], references: [uuid])
+    player_id       String @unique
+    mob_kills       Int    @default(0)
+    player_kills    Int    @default(0)
+    deaths          Int    @default(0)
+    boss_kills      Int    @default(0)
+    time_played     Int    @default(0)
+    travel_distance Float  @default(0)
+    lastShardCount  Int    @default(0)
+}
+
+enum HorseArmor {
+    LEATHER
+    IRON
+    GOLD
+}
+
+model horse {
+    id       String      @id @default(cuid())
+    player   player      @relation(fields: [playerId], references: [uuid])
+    playerId String
+    speed    Float       @default(0)
+    jump     Float       @default(0)
+    isBaby   Boolean     @default(false)
+    style    String?
+    color    String?
+    variant  String?
+    armor    HorseArmor?
+
+    marketplace marketplace[]
+
+    updatedAt     DateTime @updatedAt
+    createdAt     DateTime @default(now())
+    marketplaceId String?
+}
+
+model guild {
+    id            String        @id @default(cuid())
+    name          String        @unique
+    alias         String?
+    level         Int           @default(1)
+    exp           Int           @default(0)
+    inventory     Int           @default(0)
+    leaderId      String
+    lastRenewTime DateTime
+    members       player[]
+    itemStorage   item_storage?
+
+    updatedAt DateTime @updatedAt
+    createdAt DateTime @default(now())
+}
+
+model punishment {
+    id         String    @id @default(cuid())
+    player     player    @relation(fields: [playerId], references: [uuid])
+    playerId   String
+    type       String
+    reason     String?
+    startTime  DateTime
+    endTime    DateTime
+    giver      String
+    cancelled  Boolean   @default(false)
+    canceller  String?
+    cancelTime DateTime?
+
+    @@index([playerId, type])
+}
+
+enum MarketItemType {
+    DEFAULT
+    HORSE
+    PET
+}
+
+enum MarketItemStatus {
+    LISTING
+    EXPIRED
+    SOLD
+    CANCELLED
+}
+
+model marketplace {
+    id          String           @id @default(cuid())
+    description String           @unique
+    itemId      String?          @unique
+    horseId     String?          @unique
+    status      MarketItemStatus @default(LISTING)
+    type        MarketItemType   @default(DEFAULT)
+    sellerId    String
+    buyerId     String?
+
+    seller player    @relation("seller", fields: [sellerId], references: [uuid])
+    buyer  player?   @relation("buyer", fields: [buyerId], references: [uuid])
+    item   rpg_item? @relation(fields: [itemId], references: [id])
+    horse  horse?    @relation(fields: [horseId], references: [id])
+
+    createdAt  DateTime @default(now())
+    updatedAt  DateTime @updatedAt
+    player     player?  @relation(fields: [playerUuid], references: [uuid])
+    playerUuid String?
+
+    @@index([sellerId])
+    @@index([buyerId])
+    @@index([itemId])
+    @@index([horseId])
+}
+
+enum NPCType {
+    BLACKSMITH
+    SHOP_KEEPER
+    HORSE_KEEPER
+    TRADER
+    GENERIC
+}
+
+model npc {
+    id          Int     @id @default(autoincrement())
+    name        String
+    description String? @default("Nothing")
+    locationX   Float
+    locationY   Float
+    locationZ   Float
+    pitch       Float?  @default(0)
+    yaw         Float?  @default(0)
+    world       String
+    type        NPCType
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+}
+
+model spawn_point {
+    id        String @id @default(cuid())
+    locationX Float
+    locationY Float
+    locationZ Float
+    pitch     Float? @default(0)
+    yaw       Float? @default(0)
+    world     String
+}
+
+model mob {
+    id          String   @id @default(cuid())
+    identifier  String   @unique
+    name        String
+    entityClass String
+    level       Int
+    prefixes    String[]
+    suffixes    String[]
+    exp         Float
+    maxHP       Float
+    damage      Float
+    damageRange Float
+    attributes  String[]
+    spells      String[]
+
+    /// [MobEquipment]
+    equips Json @default("[]")
+    /// [MobDrop]
+    drops  Json @default("[]")
+
+    createdAt DateTime    @default(now())
+    updatedAt DateTime    @updatedAt
+    mob_equip mob_equip[]
+    mob_drop  mob_drop[]
+}
+
+model mob_equip {
+    id      String  @id @default(cuid())
+    mobId   String
+    key     String
+    type    String
+    enchant Boolean @default(false)
+    owner   String?
+
+    mob mob @relation(fields: [mobId], references: [id])
+
+    @@unique([mobId, key])
+}
+
+model mob_drop {
+    id        String   @id @default(cuid())
+    mobId     String
+    item      rpg_item @relation(fields: [rpg_itemId], references: [id])
+    amountMin Int
+    amountMax Int
+    chance    Float
+
+    mob        mob    @relation(fields: [mobId], references: [id])
+    rpg_itemId String
+}
